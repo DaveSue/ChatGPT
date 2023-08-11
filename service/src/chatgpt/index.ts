@@ -25,7 +25,6 @@ const ErrorCodeMessage: Record<string, string> = {
 
 const timeoutMs: number = !isNaN(+process.env.TIMEOUT_MS) ? +process.env.TIMEOUT_MS : 100 * 1000
 const disableDebug: boolean = process.env.OPENAI_API_DISABLE_DEBUG === 'true'
-const messageQueue: Array<{ message: string, options: RequestOptions }> = [];
 
 let apiModel: ApiModel
 const model = isNotEmptyString(process.env.OPENAI_API_MODEL) ? process.env.OPENAI_API_MODEL : 'gpt-3.5-turbo'
@@ -113,9 +112,8 @@ async function chatReplyProcess(options: RequestOptions) {
         process?.(partialResponse)
       },
     })
-    messageQueue.push({ message, options });
-    return processMessageQueue();
-    //return sendResponse({ type: 'Success', data: response })
+
+    return sendResponse({ type: 'Success', data: response })
   }
   catch (error: any) {
     const code = error.statusCode
@@ -124,48 +122,6 @@ async function chatReplyProcess(options: RequestOptions) {
       return sendResponse({ type: 'Fail', message: ErrorCodeMessage[code] })
     return sendResponse({ type: 'Fail', message: error.message ?? 'Please check the back-end console' })
   }
-}
-
-async function processMessageQueue() {
-  // 遍历缓存队列中的消息
-  for (const { message, options } of messageQueue) {
-    try {
-      let requestOptions: SendMessageOptions = { timeoutMs };
-
-      if (apiModel === 'ChatGPTAPI') {
-        if (isNotEmptyString(systemMessage))
-          requestOptions.systemMessage = systemMessage;
-        requestOptions.completionParams = { model, temperature, top_p };
-      }
-
-      if (options.lastContext != null) {
-        if (apiModel === 'ChatGPTAPI')
-          requestOptions.parentMessageId = options.lastContext.parentMessageId;
-        else
-          requestOptions = { ...options.lastContext };
-      }
-
-      const response = await api.sendMessage(message, {
-        ...requestOptions,
-        onProgress: (partialResponse) => {
-          options.process?.(partialResponse);
-        },
-      });
-
-      // 处理成功的响应
-      sendResponse({ type: 'Success', data: response });
-    } catch (error: any) {
-      const code = error.statusCode;
-      global.console.log(error);
-      if (Reflect.has(ErrorCodeMessage, code))
-        sendResponse({ type: 'Fail', message: ErrorCodeMessage[code] });
-      else
-        sendResponse({ type: 'Fail', message: error.message ?? 'Please check the back-end console' });
-    }
-  }
-
-  // 清空缓存队列
-  messageQueue.length = 0;
 }
 
 async function fetchUsage() {
